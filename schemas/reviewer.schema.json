@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/reviewer.schema.json",
+  "title": "QuestionReviewerOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "result", "issues", "summary"],
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "result": { "type": "string", "enum": ["pass", "fail"] },
+    "summary": { "type": "string", "minLength": 5 },
+    "issues": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "severity", "message", "suggested_fix"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "ambiguous_stem",
+              "multiple_correct",
+              "no_correct",
+              "weak_distractors",
+              "off_topic",
+              "language_error",
+              "too_easy",
+              "too_hard",
+              "matching_mismatch",
+              "rubric_missing",
+              "rubric_unclear"
+            ]
+          },
+          "severity": { "type": "string", "enum": ["info", "warn", "error"] },
+          "message": { "type": "string", "minLength": 5 },
+          "suggested_fix": { "type": "string", "minLength": 0 }
+        }
+      }
+    }
+  }
+}

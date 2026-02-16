@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "language": "tr",
+  "questions": [
+    {
+      "type": "mcq",
+      "difficulty": "easy",
+      "learning_objective": "Temel toplama",
+      "tags": ["matematik", "toplama"],
+      "stem": "2 + 3 kaçtır?",
+      "rationale": "Toplama işlemi sonucu doğru seçeneği verir.",
+      "mcq": {
+        "choices": [
+          {"id": "A", "text": "4"},
+          {"id": "B", "text": "5"},
+          {"id": "C", "text": "6"}
+        ],
+        "correct_choice_id": "B",
+        "feedback": {
+          "correct": "Doğru, 2 + 3 = 5.",
+          "distractors": [
+            {"choice_id": "A", "why_wrong": "Bir eksik hesaplandı."},
+            {"choice_id": "C", "why_wrong": "Bir fazla hesaplandı."}
+          ]
+        }
+      }
+    },
+    {
+      "type": "short",
+      "difficulty": "medium",
+      "learning_objective": "Kuvvet kavramını açıklama",
+      "tags": ["fizik", "kuvvet"],
+      "stem": "Kuvvetin tanımını kısa şekilde yazınız.",
+      "rationale": "Kuvvetin hareket üzerindeki etkisine vurgu yapılmalı.",
+      "short": {
+        "expected_points": 10,
+        "rubric": {
+          "criteria": [
+            {
+              "id": "K1",
+              "name": "Doğru tanım",
+              "levels": [
+                {"score": 0, "description": "Tanım yok veya yanlış."},
+                {"score": 5, "description": "Kısmen doğru tanım."},
+                {"score": 10, "description": "Tam ve doğru tanım."}
+              ]
+            },
+            {
+              "id": "K2",
+              "name": "Örnekleme",
+              "levels": [
+                {"score": 0, "description": "Örnek yok."},
+                {"score": 5, "description": "Kısmi örnek."},
+                {"score": 10, "description": "Uygun örnekle desteklenmiş."}
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
