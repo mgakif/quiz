@@ -11,9 +11,7 @@ use stdClass;
 
 class StudentWeaknessReport
 {
-    public function __construct(private ScoreExtractor $scoreExtractor)
-    {
-    }
+    public function __construct(private ScoreExtractor $scoreExtractor) {}
 
     /**
      * @return array<int, array{key:string,attempts:int,avg_score:float,avg_percent:float|null}>
@@ -31,6 +29,7 @@ class StudentWeaknessReport
                 endDate: $endDate,
                 classId: $classId,
                 studentId: $studentId,
+                includeGuests: false,
             )
             ->get();
 

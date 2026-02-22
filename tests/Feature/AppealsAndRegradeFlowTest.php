@@ -6,11 +6,15 @@ use App\Domain\Appeals\Actions\ResolveAppeal;
 use App\Domain\Regrade\Actions\ApplyDecisionAndRegrade;
 use App\Jobs\RegradeByQuestionVersionJob;
 use App\Models\Appeal;
+use App\Models\Assessment;
 use App\Models\Attempt;
 use App\Models\AttemptItem;
 use App\Models\AttemptResponse;
 use App\Models\Question;
 use App\Models\RubricScore;
+use App\Models\StudentTermGrade;
+use App\Models\Term;
+use App\Models\TermGradeScheme;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
@@ -274,6 +278,147 @@ it('requires reason for partial credit and writes manual override audit', functi
         'entity_type' => 'attempt_item',
         'entity_id' => (string) $item->id,
     ]);
+});
+
+it('recomputes student term grade after partial credit regrade', function (): void {
+    $teacher = User::factory()->teacher()->create();
+    $student = User::factory()->student()->create();
+
+    $term = Term::query()->create([
+        'name' => '2025-2026 Spring',
+        'start_date' => now()->subMonth()->toDateString(),
+        'end_date' => now()->addMonth()->toDateString(),
+        'is_active' => true,
+    ]);
+
+    TermGradeScheme::query()->create([
+        'term_id' => $term->id,
+        'weights' => [
+            'quiz' => 0.2,
+            'exam' => 0.8,
+            'assignment' => 0.0,
+            'participation' => 0.0,
+        ],
+        'normalize_strategy' => 'use_scheme_only',
+    ]);
+
+    Assessment::query()->create([
+        'term_id' => $term->id,
+        'legacy_exam_id' => 9101,
+        'class_id' => 9,
+        'title' => 'Essay Regrade',
+        'category' => 'exam',
+        'weight' => 1.0,
+        'published' => true,
+    ]);
+
+    Assessment::query()->create([
+        'term_id' => $term->id,
+        'legacy_exam_id' => 9102,
+        'class_id' => 9,
+        'title' => 'Quiz Stable',
+        'category' => 'quiz',
+        'weight' => 1.0,
+        'published' => true,
+    ]);
+
+    $question = Question::factory()->create();
+    $version = $question->createVersion([
+        'type' => 'essay',
+        'payload' => ['text' => 'Explain inertia.'],
+        'answer_key' => ['expected_points' => 10],
+        'rubric' => ['criteria' => ['accuracy']],
+    ]);
+
+    $attempt = Attempt::query()->create([
+        'exam_id' => 9101,
+        'student_id' => $student->id,
+        'grade_state' => 'released',
+        'started_at' => now()->subHours(4),
+        'submitted_at' => now()->subHours(3),
+        'release_at' => now()->subHours(2),
+    ]);
+
+    $item = AttemptItem::query()->create([
+        'attempt_id' => $attempt->id,
+        'question_version_id' => $version->id,
+        'order' => 1,
+        'max_points' => 10,
+    ]);
+
+    AttemptResponse::query()->create([
+        'attempt_item_id' => $item->id,
+        'response_payload' => ['text' => 'Initial answer'],
+        'submitted_at' => now()->subHours(3),
+    ]);
+
+    RubricScore::query()->create([
+        'attempt_item_id' => $item->id,
+        'scores' => [['criterion' => 'accuracy', 'points' => 2]],
+        'total_points' => 2,
+        'graded_by' => $teacher->id,
+        'graded_at' => now()->subHours(2),
+        'is_draft' => false,
+    ]);
+
+    $quizQuestion = Question::factory()->create();
+    $quizVersion = $quizQuestion->createVersion([
+        'type' => 'mcq',
+        'payload' => [
+            'stem' => '2 + 2 = ?',
+            'choices' => [
+                ['id' => 'A', 'text' => '4'],
+                ['id' => 'B', 'text' => '5'],
+            ],
+        ],
+        'answer_key' => ['correct_choice_id' => 'A'],
+        'rubric' => null,
+    ]);
+
+    $quizAttempt = Attempt::query()->create([
+        'exam_id' => 9102,
+        'student_id' => $student->id,
+        'grade_state' => 'released',
+        'started_at' => now()->subHours(4),
+        'submitted_at' => now()->subHours(3),
+        'release_at' => now()->subHours(2),
+    ]);
+
+    $quizItem = AttemptItem::query()->create([
+        'attempt_id' => $quizAttempt->id,
+        'question_version_id' => $quizVersion->id,
+        'order' => 1,
+        'max_points' => 10,
+    ]);
+
+    AttemptResponse::query()->create([
+        'attempt_item_id' => $quizItem->id,
+        'response_payload' => ['choice_id' => 'A'],
+        'submitted_at' => now()->subHours(3),
+    ]);
+
+    app(\App\Domain\Gradebook\ComputeStudentTermGrade::class)->execute($term, $student);
+
+    expect((float) StudentTermGrade::query()
+        ->where('term_id', $term->id)
+        ->where('student_id', $student->id)
+        ->value('computed_grade'))->toBe(36.0);
+
+    app(ApplyDecisionAndRegrade::class)->execute(
+        teacher: $teacher,
+        scope: 'attempt_item',
+        decisionType: 'partial_credit',
+        payload: [
+            'new_points' => 8,
+            'reason' => 'Accepted alternative solution path.',
+        ],
+        attemptItem: $item,
+    );
+
+    expect((float) StudentTermGrade::query()
+        ->where('term_id', $term->id)
+        ->where('student_id', $student->id)
+        ->value('computed_grade'))->toBe(84.0);
 });
 
 it('applies void question drop from total deterministically', function (): void {

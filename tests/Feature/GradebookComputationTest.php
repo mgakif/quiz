@@ -11,6 +11,7 @@ use App\Models\AttemptResponse;
 use App\Models\Question;
 use App\Models\StudentTermGrade;
 use App\Models\Term;
+use App\Models\TermGradeScheme;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
@@ -189,6 +190,116 @@ it('requires reason for override and writes audit event', function (): void {
         'entity_type' => 'student_term_grade',
         'actor_id' => $teacher->id,
     ]);
+});
+
+it('uses category weights only when scheme strategy is use_scheme_only', function (): void {
+    $teacher = User::factory()->teacher()->create();
+    $student = User::factory()->student()->create();
+
+    $term = Term::query()->create([
+        'name' => '2025-2026 Bahar',
+        'start_date' => now()->subMonth()->toDateString(),
+        'end_date' => now()->addMonth()->toDateString(),
+        'is_active' => true,
+    ]);
+
+    TermGradeScheme::query()->create([
+        'term_id' => $term->id,
+        'weights' => [
+            'quiz' => 0.2,
+            'exam' => 0.8,
+            'assignment' => 0.0,
+            'participation' => 0.0,
+        ],
+        'normalize_strategy' => 'use_scheme_only',
+    ]);
+
+    $quizAssessment = Assessment::query()->create([
+        'term_id' => $term->id,
+        'legacy_exam_id' => 6001,
+        'class_id' => 9,
+        'title' => 'Quiz Weight Ignored',
+        'category' => 'quiz',
+        'weight' => 99.0,
+        'scheduled_at' => now()->subDays(3),
+        'published' => true,
+    ]);
+
+    $examAssessment = Assessment::query()->create([
+        'term_id' => $term->id,
+        'legacy_exam_id' => 6002,
+        'class_id' => 9,
+        'title' => 'Exam Weight Ignored',
+        'category' => 'exam',
+        'weight' => 0.1,
+        'scheduled_at' => now()->subDays(2),
+        'published' => true,
+    ]);
+
+    $versionA = createGradebookMcqVersion($teacher, 'A');
+    $versionB = createGradebookMcqVersion($teacher, 'B');
+
+    createGradebookAttempt($student, (int) $quizAssessment->legacy_exam_id, $versionA->id, 'A', 'released', now()->subHours(2));
+    createGradebookAttempt($student, (int) $examAssessment->legacy_exam_id, $versionB->id, 'A', 'released', now()->subHours(2));
+
+    $result = app(ComputeStudentTermGrade::class)->execute($term, $student, 9, false);
+
+    expect($result['computed_grade'])->toBe(20.0);
+});
+
+it('uses scheme times assessment weight strategy when configured', function (): void {
+    $teacher = User::factory()->teacher()->create();
+    $student = User::factory()->student()->create();
+
+    $term = Term::query()->create([
+        'name' => '2025-2026 Bahar',
+        'start_date' => now()->subMonth()->toDateString(),
+        'end_date' => now()->addMonth()->toDateString(),
+        'is_active' => true,
+    ]);
+
+    TermGradeScheme::query()->create([
+        'term_id' => $term->id,
+        'weights' => [
+            'quiz' => 0.7,
+            'exam' => 0.3,
+            'assignment' => 0.0,
+            'participation' => 0.0,
+        ],
+        'normalize_strategy' => 'scheme_times_assessment_weight',
+    ]);
+
+    $quizAssessment = Assessment::query()->create([
+        'term_id' => $term->id,
+        'legacy_exam_id' => 6003,
+        'class_id' => 9,
+        'title' => 'Quiz Composite Weight',
+        'category' => 'quiz',
+        'weight' => 2.0,
+        'scheduled_at' => now()->subDays(3),
+        'published' => true,
+    ]);
+
+    $examAssessment = Assessment::query()->create([
+        'term_id' => $term->id,
+        'legacy_exam_id' => 6004,
+        'class_id' => 9,
+        'title' => 'Exam Composite Weight',
+        'category' => 'exam',
+        'weight' => 1.0,
+        'scheduled_at' => now()->subDays(2),
+        'published' => true,
+    ]);
+
+    $versionA = createGradebookMcqVersion($teacher, 'A');
+    $versionB = createGradebookMcqVersion($teacher, 'B');
+
+    createGradebookAttempt($student, (int) $quizAssessment->legacy_exam_id, $versionA->id, 'A', 'released', now()->subHours(2));
+    createGradebookAttempt($student, (int) $examAssessment->legacy_exam_id, $versionB->id, 'A', 'released', now()->subHours(2));
+
+    $result = app(ComputeStudentTermGrade::class)->execute($term, $student, 9, false);
+
+    expect($result['computed_grade'])->toBe(82.35);
 });
 
 function createGradebookMcqVersion(User $teacher, string $correctChoiceId): \App\Models\QuestionVersion

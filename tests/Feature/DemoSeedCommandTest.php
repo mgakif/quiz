@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use App\Models\AiGrading;
 use App\Models\Appeal;
+use App\Models\Assessment;
 use App\Models\Attempt;
 use App\Models\AttemptItem;
+use App\Models\Exam;
 use App\Models\Leaderboard;
 use App\Models\QuestionStat;
 use App\Models\RegradeDecision;
@@ -100,4 +102,7 @@ it('seeds deterministic demo data with regrade and leaderboard artifacts', funct
             ->whereIn('period', ['weekly', 'all_time'])
             ->count()
     )->toBe(2);
+
+    expect(Assessment::query()->count())->toBe(Exam::query()->count())
+        ->and(Assessment::query()->whereNotNull('legacy_exam_id')->count())->toBeGreaterThanOrEqual(1);
 });

@@ -14,11 +14,13 @@ use App\Models\Appeal;
 use App\Models\Attempt;
 use App\Models\AttemptItem;
 use App\Models\AttemptResponse;
+use App\Models\Exam;
 use App\Models\Question;
 use App\Models\QuestionVersion;
 use App\Models\RegradeDecision;
 use App\Models\RubricScore;
 use App\Models\StudentProfile;
+use App\Models\Term;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
@@ -58,7 +60,9 @@ class DemoSeed extends Command
     {
         $teacher = $this->upsertTeacher();
         $students = $this->upsertStudents();
+        $this->ensureDefaultTerm();
         $quizSchedule = $this->buildQuizSchedule();
+        $this->upsertDemoExam($quizSchedule);
         $quizQuestionSets = $this->createQuizQuestionSets($teacher, $quizSchedule);
 
         $this->createAttemptsAndResponses($teacher, $students, $quizSchedule, $quizQuestionSets);
@@ -74,6 +78,44 @@ class DemoSeed extends Command
             'appeal_count' => Appeal::query()->count(),
             'resolved_appeal_count' => Appeal::query()->where('status', Appeal::STATUS_RESOLVED)->count(),
         ];
+    }
+
+    private function ensureDefaultTerm(): void
+    {
+        $defaultTerm = Term::query()
+            ->where('is_active', true)
+            ->orderByDesc('start_date')
+            ->first()
+            ?? Term::query()->orderByDesc('start_date')->first();
+
+        if ($defaultTerm !== null) {
+            return;
+        }
+
+        Term::query()->create([
+            'name' => 'Demo Term',
+            'start_date' => CarbonImmutable::now()->subMonth()->toDateString(),
+            'end_date' => CarbonImmutable::now()->addMonth()->toDateString(),
+            'is_active' => true,
+            'created_at' => CarbonImmutable::now(),
+        ]);
+    }
+
+    /**
+     * @param  array<int, array{quiz_code:string,title:string,scheduled_at:CarbonImmutable}>  $quizSchedule
+     */
+    private function upsertDemoExam(array $quizSchedule): void
+    {
+        $firstScheduledAt = $quizSchedule[0]['scheduled_at'] ?? CarbonImmutable::now();
+
+        Exam::query()->updateOrCreate(
+            ['id' => self::CLASS_ID],
+            [
+                'title' => '9A Demo Exam',
+                'class_id' => self::CLASS_ID,
+                'scheduled_at' => $firstScheduledAt,
+            ],
+        );
     }
 
     private function upsertTeacher(): User

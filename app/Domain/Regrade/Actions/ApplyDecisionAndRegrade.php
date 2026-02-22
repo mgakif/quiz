@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Regrade\Actions;
 
 use App\Jobs\ComputeLeaderboardJob;
+use App\Jobs\ComputeStudentTermGradeJob;
 use App\Jobs\RegradeAttemptItemJob;
 use App\Jobs\RegradeByQuestionVersionJob;
 use App\Models\AttemptItem;
@@ -16,12 +17,11 @@ use Illuminate\Validation\ValidationException;
 
 class ApplyDecisionAndRegrade
 {
-    public function __construct()
-    {
-    }
+    public function __construct() {}
 
     /**
      * @param  array<string, mixed>  $payload
+     *
      * @throws ValidationException
      */
     public function execute(
@@ -112,6 +112,10 @@ class ApplyDecisionAndRegrade
                 }
             }
 
+            foreach ($this->resolveAffectedTermStudentPairs($scope, $attemptItem, $questionVersion) as $pair) {
+                ComputeStudentTermGradeJob::dispatch($pair['term_id'], $pair['student_id']);
+            }
+
             return $decision;
         });
     }
@@ -133,6 +137,7 @@ class ApplyDecisionAndRegrade
 
     /**
      * @param  array<string, mixed>  $payload
+     *
      * @throws ValidationException
      */
     private function assertPayload(string $decisionType, array $payload): void
@@ -223,6 +228,50 @@ class ApplyDecisionAndRegrade
             ->pluck('attempts.exam_id')
             ->map(fn (mixed $value): int => (int) $value)
             ->filter(fn (int $examId): bool => $examId > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{term_id:string,student_id:int}>
+     */
+    private function resolveAffectedTermStudentPairs(
+        string $scope,
+        ?AttemptItem $attemptItem,
+        ?QuestionVersion $questionVersion,
+    ): array {
+        if ($scope === 'attempt_item' && $attemptItem !== null) {
+            $attemptItem->loadMissing('attempt.assessment');
+            $termId = (string) ($attemptItem->attempt?->assessment?->term_id ?? '');
+            $studentId = (int) ($attemptItem->attempt?->student_id ?? 0);
+
+            if ($termId === '' || $studentId <= 0) {
+                return [];
+            }
+
+            return [[
+                'term_id' => $termId,
+                'student_id' => $studentId,
+            ]];
+        }
+
+        if ($questionVersion === null) {
+            return [];
+        }
+
+        return AttemptItem::query()
+            ->where('attempt_items.question_version_id', $questionVersion->id)
+            ->join('attempts', 'attempts.id', '=', 'attempt_items.attempt_id')
+            ->join('assessments', 'assessments.legacy_exam_id', '=', 'attempts.exam_id')
+            ->whereNotNull('assessments.term_id')
+            ->selectRaw('assessments.term_id as term_id, attempts.student_id as student_id')
+            ->distinct()
+            ->get()
+            ->map(fn (object $row): array => [
+                'term_id' => (string) $row->term_id,
+                'student_id' => (int) $row->student_id,
+            ])
+            ->filter(fn (array $row): bool => $row['term_id'] !== '' && $row['student_id'] > 0)
             ->values()
             ->all();
     }

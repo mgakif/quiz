@@ -5,7 +5,12 @@
 
             <div class="flex gap-2">
                 <x-filament::button type="submit">Apply Filters</x-filament::button>
+                <x-filament::button type="button" color="success" wire:click="saveGradeScheme">Save Grade Scheme</x-filament::button>
                 <x-filament::button type="button" color="warning" wire:click="recompute">Recompute</x-filament::button>
+            </div>
+
+            <div class="text-sm text-gray-600">
+                Grade scheme total: {{ number_format($this->gradeSchemeTotal, 2) }} (target 1.00, auto-normalized in compute)
             </div>
         </form>
 

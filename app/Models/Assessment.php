@@ -57,6 +57,11 @@ class Assessment extends Model
         return $this->belongsTo(Term::class);
     }
 
+    public function exam(): BelongsTo
+    {
+        return $this->belongsTo(Exam::class, 'legacy_exam_id', 'id');
+    }
+
     public function attempts(): HasMany
     {
         return $this->hasMany(Attempt::class, 'exam_id', 'legacy_exam_id');

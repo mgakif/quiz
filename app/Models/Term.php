@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class Term extends Model
@@ -55,5 +56,10 @@ class Term extends Model
     public function studentGrades(): HasMany
     {
         return $this->hasMany(StudentTermGrade::class);
+    }
+
+    public function gradeScheme(): HasOne
+    {
+        return $this->hasOne(TermGradeScheme::class);
     }
 }

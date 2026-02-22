@@ -6,8 +6,8 @@ namespace App\Models;
 
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -17,6 +17,7 @@ class User extends Authenticatable implements FilamentUser
     use HasFactory, Notifiable;
 
     public const ROLE_TEACHER = 'teacher';
+
     public const ROLE_STUDENT = 'student';
 
     /**
@@ -66,6 +67,11 @@ class User extends Authenticatable implements FilamentUser
     public function studentTermGrades(): HasMany
     {
         return $this->hasMany(StudentTermGrade::class, 'student_id');
+    }
+
+    public function publicExamLinks(): HasMany
+    {
+        return $this->hasMany(PublicExamLink::class, 'created_by');
     }
 
     public function canAccessPanel(Panel $panel): bool

@@ -17,9 +17,7 @@ class ComputeTermGradesJob implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public string $termId, public ?int $classId = null)
-    {
-    }
+    public function __construct(public string $termId, public ?int $classId = null) {}
 
     public function handle(ComputeStudentTermGrade $computeStudentTermGrade): void
     {
@@ -46,6 +44,7 @@ class ComputeTermGradesJob implements ShouldQueue
                         ->select('student_id'))
                     ->orWhereIn('id', Attempt::query()
                         ->whereIn('exam_id', $assessmentExamIds)
+                        ->whereNotNull('student_id')
                         ->select('student_id')
                         ->distinct());
             });

@@ -14,9 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 class ScoreExtractor
 {
-    public function __construct(private GradeReleasePolicy $gradeReleasePolicy)
-    {
-    }
+    public function __construct(private GradeReleasePolicy $gradeReleasePolicy) {}
 
     /**
      * @return array{
@@ -84,6 +82,7 @@ class ScoreExtractor
         ?CarbonInterface $endDate = null,
         ?int $classId = null,
         ?int $studentId = null,
+        bool $includeGuests = false,
     ): QueryBuilder {
         $releasedAttemptIds = Attempt::query()->select('id');
         $this->gradeReleasePolicy->applyVisibilityScope($releasedAttemptIds);
@@ -168,6 +167,7 @@ class ScoreExtractor
             ->leftJoinSub($latestQuestionVersionDecisionIds, 'rvd_latest', 'rvd_latest.question_version_id', '=', 'ai.question_version_id')
             ->leftJoin('regrade_decisions as rvd', 'rvd.id', '=', 'rvd_latest.latest_id')
             ->whereIn('ai.attempt_id', $releasedAttemptIds)
+            ->when(! $includeGuests, fn (QueryBuilder $builder) => $builder->whereNotNull('a.student_id'))
             ->when($classId !== null, fn (QueryBuilder $builder) => $builder->where('a.exam_id', $classId))
             ->when($studentId !== null, fn (QueryBuilder $builder) => $builder->where('a.student_id', $studentId))
             ->when($startDate !== null, fn (QueryBuilder $builder) => $builder->whereRaw("{$usedAtExpr} >= ?", [$startDate]))

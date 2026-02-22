@@ -32,3 +32,12 @@ Run and summarize:
 ## Notes
 - Follow AGENTS.md rules.
 - All AI JSON must validate against schemas in /schemas.
+
+## Çalıştırma/Doğrulama komutları:
+- Sail kullanma.
+- Laravel komutlarını şu şekilde çalıştır:
+  - docker compose exec quiz php artisan test
+  - docker compose exec quiz php artisan migrate:fresh --seed
+  - docker compose exec quiz php vendor/bin/pint --dirty --format=agent
+Not: Container adı "quiz" ve php binary container içinde mevcut.
+

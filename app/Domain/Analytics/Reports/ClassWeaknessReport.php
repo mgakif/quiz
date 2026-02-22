@@ -11,9 +11,7 @@ use stdClass;
 
 class ClassWeaknessReport
 {
-    public function __construct(private ScoreExtractor $scoreExtractor)
-    {
-    }
+    public function __construct(private ScoreExtractor $scoreExtractor) {}
 
     /**
      * @return array<int, array{key:string,attempts:int,avg_score:float,avg_percent:float|null}>
@@ -29,6 +27,7 @@ class ClassWeaknessReport
                 startDate: $startDate,
                 endDate: $endDate,
                 classId: $classId,
+                includeGuests: (bool) config('analytics.include_guests', false),
             )
             ->get();
 

@@ -15,9 +15,7 @@ class RegradeByQuestionVersionJob implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public int $regradeDecisionId, public int $questionVersionId)
-    {
-    }
+    public function __construct(public int $regradeDecisionId, public int $questionVersionId) {}
 
     public function handle(RecordAuditEvent $recordAuditEvent): void
     {
@@ -54,6 +52,25 @@ class RegradeByQuestionVersionJob implements ShouldQueue
                 foreach ($items as $item) {
                     RegradeAttemptItemJob::dispatch($this->regradeDecisionId, (int) $item->id);
                 }
+            });
+
+        AttemptItem::query()
+            ->where('attempt_items.question_version_id', $targetVersionId)
+            ->join('attempts', 'attempts.id', '=', 'attempt_items.attempt_id')
+            ->join('assessments', 'assessments.legacy_exam_id', '=', 'attempts.exam_id')
+            ->whereNotNull('assessments.term_id')
+            ->selectRaw('assessments.term_id as term_id, attempts.student_id as student_id')
+            ->distinct()
+            ->get()
+            ->each(function (object $row): void {
+                $termId = (string) $row->term_id;
+                $studentId = (int) $row->student_id;
+
+                if ($termId === '' || $studentId <= 0) {
+                    return;
+                }
+
+                ComputeStudentTermGradeJob::dispatch($termId, $studentId);
             });
 
         $recordAuditEvent->execute(

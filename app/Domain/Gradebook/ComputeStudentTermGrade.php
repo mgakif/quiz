@@ -21,8 +21,8 @@ class ComputeStudentTermGrade
         private ScoreExtractor $scoreExtractor,
         private GradeReleasePolicy $gradeReleasePolicy,
         private RecordAuditEvent $recordAuditEvent,
-    ) {
-    }
+        private GradeScheme $gradeScheme,
+    ) {}
 
     /**
      * @return array{
@@ -45,8 +45,13 @@ class ComputeStudentTermGrade
      *     }>
      * }
      */
-    public function execute(Term $term, User $student, ?int $classId = null, bool $persist = true): array
-    {
+    public function execute(
+        Term $term,
+        User $student,
+        ?int $classId = null,
+        bool $persist = true,
+        bool $recordAudit = true,
+    ): array {
         $assessments = Assessment::query()
             ->where('term_id', $term->id)
             ->where('published', true)
@@ -56,21 +61,33 @@ class ComputeStudentTermGrade
             ->get();
 
         $attemptsByExamId = $this->loadAttemptsByExamId($student, $assessments);
+        $scheme = $this->gradeScheme->getSchemeForTerm((string) $term->id);
+        $categoryWeights = $scheme['weights'];
+        $normalizeStrategy = (string) $scheme['normalize_strategy'];
         $strategy = (string) config('gradebook.attempt_strategy', 'latest_released');
         $missingCount = 0;
         $weightSum = 0.0;
-        $contributionSum = 0.0;
+        $weightedPercentSum = 0.0;
 
         $rows = $assessments
             ->map(function (Assessment $assessment) use (
                 $attemptsByExamId,
+                $categoryWeights,
+                $normalizeStrategy,
                 $strategy,
                 &$missingCount,
                 &$weightSum,
-                &$contributionSum,
+                &$weightedPercentSum,
             ): array {
-                $weight = round((float) $assessment->weight, 2);
-                $weightSum += $weight;
+                $baseWeight = round((float) $assessment->weight, 4);
+                $categoryWeight = max(0.0, (float) ($categoryWeights[$assessment->category] ?? 1.0));
+
+                $effectiveWeight = $normalizeStrategy === GradeScheme::STRATEGY_USE_SCHEME_ONLY
+                    ? $categoryWeight
+                    : ($categoryWeight * $baseWeight);
+
+                $effectiveWeight = round(max(0.0, $effectiveWeight), 6);
+                $weightSum += $effectiveWeight;
 
                 /** @var Collection<int, Attempt> $attempts */
                 $attempts = $attemptsByExamId->get((int) $assessment->legacy_exam_id, collect());
@@ -92,7 +109,7 @@ class ComputeStudentTermGrade
                         'assessment_id' => $assessment->id,
                         'title' => $assessment->title,
                         'category' => $assessment->category,
-                        'weight' => $weight,
+                        'weight' => round($effectiveWeight, 4),
                         'attempt_status' => $status,
                         'percent' => null,
                         'earned_points' => null,
@@ -105,14 +122,14 @@ class ComputeStudentTermGrade
 
                 [$earnedPoints, $maxPoints] = $this->scoreAttempt($selectedReleasedAttempt);
                 $percent = $maxPoints > 0 ? round(($earnedPoints / $maxPoints) * 100, 2) : 0.0;
-                $contribution = round(($percent / 100) * $weight, 4);
-                $contributionSum += $contribution;
+                $contribution = round(($percent / 100) * $effectiveWeight, 4);
+                $weightedPercentSum += ($percent * $effectiveWeight);
 
                 return [
                     'assessment_id' => $assessment->id,
                     'title' => $assessment->title,
                     'category' => $assessment->category,
-                    'weight' => $weight,
+                    'weight' => round($effectiveWeight, 4),
                     'attempt_status' => 'released',
                     'percent' => $percent,
                     'earned_points' => $earnedPoints,
@@ -126,7 +143,7 @@ class ComputeStudentTermGrade
             ->all();
 
         $computedGrade = $weightSum > 0
-            ? round(($contributionSum / $weightSum) * 100, 2)
+            ? round($weightedPercentSum / $weightSum, 2)
             : null;
 
         if ($persist) {
@@ -141,19 +158,21 @@ class ComputeStudentTermGrade
                 ],
             );
 
-            $this->recordAuditEvent->execute(
-                actor: null,
-                actorType: 'system',
-                eventType: 'term_grade_computed',
-                entityType: 'student_term_grade',
-                entityId: sprintf('%s:%d', $term->id, $student->id),
-                meta: [
-                    'term_id' => $term->id,
-                    'student_id' => $student->id,
-                    'grade' => $computedGrade,
-                    'missing_assessments_count' => $missingCount,
-                ],
-            );
+            if ($recordAudit) {
+                $this->recordAuditEvent->execute(
+                    actor: null,
+                    actorType: 'system',
+                    eventType: 'term_grade_computed',
+                    entityType: 'student_term_grade',
+                    entityId: sprintf('%s:%d', $term->id, $student->id),
+                    meta: [
+                        'term_id' => $term->id,
+                        'student_id' => $student->id,
+                        'grade' => $computedGrade,
+                        'missing_assessments_count' => $missingCount,
+                    ],
+                );
+            }
         }
 
         return [

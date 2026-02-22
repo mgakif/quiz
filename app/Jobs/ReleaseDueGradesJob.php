@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Models\AuditEvent;
+use App\Models\Assessment;
 use App\Models\Attempt;
+use App\Models\AuditEvent;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Schema;
@@ -44,6 +45,34 @@ class ReleaseDueGradesJob implements ShouldQueue
                 ComputeLeaderboardJob::dispatch($classId, $period);
             }
         }
+
+        $recomputeTargets = Assessment::query()
+            ->whereIn('legacy_exam_id', $dueAttempts->pluck('exam_id')->all())
+            ->whereNotNull('term_id')
+            ->get(['legacy_exam_id', 'term_id'])
+            ->keyBy(fn (Assessment $assessment): int => (int) $assessment->legacy_exam_id);
+
+        $dueAttempts
+            ->map(function (Attempt $attempt) use ($recomputeTargets): ?string {
+                if ($attempt->student_id === null) {
+                    return null;
+                }
+
+                $assessment = $recomputeTargets->get((int) $attempt->exam_id);
+
+                if (! $assessment instanceof Assessment) {
+                    return null;
+                }
+
+                return sprintf('%s:%d', (string) $assessment->term_id, (int) $attempt->student_id);
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->each(function (string $pair): void {
+                [$termId, $studentId] = explode(':', $pair);
+                ComputeStudentTermGradeJob::dispatch($termId, (int) $studentId);
+            });
 
         if (! Schema::hasTable('audit_events')) {
             return;

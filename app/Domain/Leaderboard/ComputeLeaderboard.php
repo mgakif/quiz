@@ -18,9 +18,7 @@ class ComputeLeaderboard
 {
     private const CACHE_TTL_SECONDS = 3600;
 
-    public function __construct(private ScoreExtractor $scoreExtractor)
-    {
-    }
+    public function __construct(private ScoreExtractor $scoreExtractor) {}
 
     /**
      * @return array{
@@ -164,6 +162,7 @@ class ComputeLeaderboard
             startDate: $startDate,
             endDate: $endDate,
             classId: $classId,
+            includeGuests: false,
         );
 
         $aggregated = DB::query()

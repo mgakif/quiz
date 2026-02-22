@@ -18,9 +18,7 @@ class RegradeAttemptItemJob implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public int $regradeDecisionId, public int $attemptItemId)
-    {
-    }
+    public function __construct(public int $regradeDecisionId, public int $attemptItemId) {}
 
     public function handle(RecordAuditEvent $recordAuditEvent): void
     {
@@ -67,6 +65,14 @@ class RegradeAttemptItemJob implements ShouldQueue
                 'decision_type' => $decision->decision_type,
             ],
         );
+
+        $attemptItem->loadMissing('attempt.assessment');
+        $termId = (string) ($attemptItem->attempt?->assessment?->term_id ?? '');
+        $studentId = (int) ($attemptItem->attempt?->student_id ?? 0);
+
+        if ($termId !== '' && $studentId > 0) {
+            ComputeStudentTermGradeJob::dispatch($termId, $studentId);
+        }
     }
 
     /**
